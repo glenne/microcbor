@@ -56,7 +56,6 @@ TEST(microcbor, str) {
 
   // Test const char * defaults
   const char *s = cbor.get("s", "Error");
-  std::cout << "s=" << s << std::endl;
   ASSERT_EQ(11, cbor.getLength("s"));
   ASSERT_EQ(0, strncmp("Hello World", s, 11));
   ASSERT_EQ(0, cbor.getLength("null"));
@@ -90,7 +89,6 @@ TEST(microcbor, str_null) {
 
   // Test const char * defaults
   const char *s = cbor.get("s", "Error");
-  std::cout << "s=" << s << std::endl;
   ASSERT_EQ(11, cbor.getLength("s"));
   ASSERT_EQ(0, strcmp("Hello World", s));
   ASSERT_EQ(0, cbor.getLength("null"));
