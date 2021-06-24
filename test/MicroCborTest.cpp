@@ -5,7 +5,7 @@
 #ifdef CONFIG_MICROCBOR_STD_VECTOR
 #include <vector>
 #endif
-using namespace entazza::cbor;
+using namespace entazza;
 
 TEST(microcbor, empty) {
   uint8_t buf[200];
@@ -47,7 +47,7 @@ TEST(microcbor, maps) {
 }
 TEST(microcbor, str) {
   uint8_t buf[200];
-  MicroCbor cbor(buf, sizeof(buf));
+  MicroCbor cbor(buf, sizeof(buf), false);
   cbor.startMap();
   cbor.add("s", "Hello World");
   cbor.add("null", "");
@@ -56,10 +56,45 @@ TEST(microcbor, str) {
 
   // Test const char * defaults
   const char *s = cbor.get("s", "Error");
-  ASSERT_EQ(0, strcmp("Hello World", s));
+  std::cout << "s=" << s << std::endl;
   ASSERT_EQ(11, cbor.getLength("s"));
-  ASSERT_EQ(0, strcmp("", cbor.get("null", "Error")));
+  ASSERT_EQ(0, strncmp("Hello World", s, 11));
   ASSERT_EQ(0, cbor.getLength("null"));
+
+  // Test not found case
+  s = cbor.get("xyz", "Not Found");
+  ASSERT_EQ(0, strcmp("Not Found", s));
+
+  // Test char * default
+  char temp[5] = {'h', 'i', 0};
+  s = cbor.get("s", temp);
+  ASSERT_EQ(0, strncmp("Hello World", s, 11));
+
+  cbor.restart();
+  cbor.startMap();
+  cbor.add("s", temp);
+  cbor.endMap();
+
+  cbor.restart();
+  ASSERT_EQ(0, strncmp("hi", cbor.get("s", "Error"), 2));
+}
+
+TEST(microcbor, str_null) {
+  uint8_t buf[200];
+  MicroCbor cbor(buf, sizeof(buf), true);
+  cbor.startMap();
+  cbor.add("s", "Hello World");
+  cbor.add("null", "");
+  cbor.endMap();
+  cbor.restart();
+
+  // Test const char * defaults
+  const char *s = cbor.get("s", "Error");
+  std::cout << "s=" << s << std::endl;
+  ASSERT_EQ(11, cbor.getLength("s"));
+  ASSERT_EQ(0, strcmp("Hello World", s));
+  ASSERT_EQ(0, cbor.getLength("null"));
+  ASSERT_EQ(0, strcmp("", cbor.get("null", "Error")));
 
   // Test not found case
   s = cbor.get("xyz", "Not Found");
@@ -78,6 +113,7 @@ TEST(microcbor, str) {
   cbor.restart();
   ASSERT_EQ(0, strcmp("hi", cbor.get("s", "Error")));
 }
+
 TEST(microcbor, floats) {
   uint8_t buf[200];
   MicroCbor cbor(buf, sizeof(buf));

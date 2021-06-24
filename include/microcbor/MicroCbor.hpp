@@ -3,6 +3,33 @@
  *
  * @brief Provide a minimal implementation of CBOR suitable for embedded use.
  *
+ * Basic usage:
+ *
+ *  int32_t i32 = 12345678;
+ *  int32_t *vec[] = {1,2,3,4};
+ *
+ *  // encode
+ *  uint8_t   buf[200];
+ *  MicroCbor cbor(buf, sizeof(buf));
+ *  cbor.startMap();
+ *  {
+ *      // Add values using type inference to store properly
+ *      cbor.add("i32", i32);
+ *      cbor.add("vec", vec);
+ *  }
+ *  cbor.endMap();
+ *
+ * std::cout << "Bytes serialized " << cbor.bytesSerialized() << std::endl;
+ *
+ *  // decode a buffer
+ *  MicroCbor cbor(buf, sizeof(buf));
+ *  // query for value, use default if not found or incompatible
+ *  auto i32 = cbor.get<int32_t>("i32",-1);
+ *  const int32_t* vecinfo = cbor.getPointer<int32_t>("vec",nullptr);
+ *  if (vecinfo.p != nullptr) {
+ *     processData(vecinfo.p, vecinfo.length, i32);
+ *  }
+ *
  ********************************************************************************/
 #pragma once
 
@@ -110,44 +137,26 @@ struct kCborTagInfo<double> {
 
 /**
  * @brief A class to encode and decode data in CBOR format.
- *
- * Basic usage:
- *
- *  int32_t i32 = 12345678;
- *  int32_t *vec[] = {1,2,3,4};
- *
- *  // encode
- *  uint8_t   buf[200];
- *  MicroCbor cbor(buf, sizeof(buf));
- *  cbor.startMap();
- *  {
- *      // Add values using type inference to store properly
- *      cbor.add("i32", i32);
- *      cbor.add("vec", vec);
- *  }
- *  cbor.endMap();
- *
- *  // decode
- *  MicroCbor cbor(buf, sizeof(buf));
- *  // query for value, use default if not found or incompatible
- *  auto i32 = cbor.get<int32_t>("i32",-1);
- *  const int32_t* vecinfo = cbor.getPointer<int32_t>("vec",nullptr);
- *  if (vecinfo.p != nullptr) {
- *     processData(vecinfo.p, vecinfo.length, i32);
- *  }
- *
  */
 class MicroCbor {
   friend class MicroCborSerializer;
 
  private:
-  typedef struct {
+  struct TypeInfo {
     uint16_t tag;
     uint8_t major;
     uint8_t minor;
     uint8_t headerBytes;
     uint8_t *p;
-  } TypeInfo;
+    TypeInfo(uint8_t major) : major(major) {}
+    TypeInfo(uint16_t tag, uint8_t major, uint8_t minor, uint8_t headerBytes,
+             uint8_t *p)
+        : tag(tag),
+          major(major),
+          minor(minor),
+          headerBytes(headerBytes),
+          p(p) {}
+  };
 
   typedef struct {
     uint32_t mapStartPos;
@@ -231,20 +240,16 @@ class MicroCbor {
                                                   1, 1, 1, 1, 2, 3, 5, 9};
 
     if (mDataOffset >= mMaxBufLen) {
-      return {.major = kCborError};
+      return TypeInfo(kCborError);
     }
     uint8_t *p = mBuf + mDataOffset;
     uint8_t major = *p >> 5;
     uint8_t minor = *p & 0x1f;
     uint8_t headerBytes = kCborheaderBytes[minor];
     if (mDataOffset + headerBytes > mMaxBufLen) {
-      return {.major = kCborError};
+      return TypeInfo(kCborError);
     }
-    TypeInfo field = {.tag = kCborTagInvalid,
-                      .major = major,
-                      .minor = minor,
-                      .headerBytes = headerBytes,
-                      .p = p};
+    TypeInfo field = TypeInfo(kCborTagInvalid, major, minor, headerBytes, p);
 
     if (major == kCborTag) {
       // next field is the actual 'value'
@@ -333,7 +338,7 @@ class MicroCbor {
     auto info = getNextField();
     // We must be in a map to find anything
     if (info.major != kCborMap) {
-      return {.major = kCborError};
+      return TypeInfo(kCborError);
     }
 
     auto len = strlen(name);
@@ -356,7 +361,7 @@ class MicroCbor {
 
     // restore offset to beginning of map
     mDataOffset = mapOffset;
-    return {.major = kCborError};
+    return TypeInfo(kCborError);
   }
 
   /**
@@ -529,11 +534,11 @@ class MicroCbor {
    *
    * @param buf A pointer to a working i/o buffer
    * @param maxBufLen The length in bytes of the buffer
-   * @param nullTermiante True to null terminate user strings to assist with
-   * in-place reads
+   * @param nullTermiante True to null terminate user strings when serializing
+   * to assist with in-place reads
    */
   MicroCbor(void *buf, const uint32_t maxBufLen,
-            const bool nullTerminate = false)
+            const bool nullTerminate = true)
       : mNullTerminate(nullTerminate) {
     this->initBuffer(buf, maxBufLen);
   }

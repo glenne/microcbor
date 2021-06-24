@@ -1,16 +1,19 @@
 # Micro CBOR Test
 
-The MicroCbor test is based on gtest.
+The MicroCbor test is based on gtest and is found in the test/ directory.
 
-## CMake build
+## Test Build
 
 Build and run using cmake with the following commands:
 
 ```bash
+cd test
 mkdir build && cd build
 cmake ..
 make && ./microcbortest
 ```
+
+## Test Debugging
 
 For debugging, individual tests can be specified from command line options:
 
