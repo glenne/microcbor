@@ -144,16 +144,16 @@ class MicroCbor {
  private:
   struct TypeInfo {
     uint16_t tag;
-    uint8_t major;
-    uint8_t minor;
+    uint8_t majorval;
+    uint8_t minorval;
     uint8_t headerBytes;
     uint8_t *p;
-    TypeInfo(uint8_t major) : major(major) {}
-    TypeInfo(uint16_t tag, uint8_t major, uint8_t minor, uint8_t headerBytes,
+    TypeInfo(uint8_t majorval) : majorval(majorval) {}
+    TypeInfo(uint16_t tag, uint8_t majorval, uint8_t minorval, uint8_t headerBytes,
              uint8_t *p)
         : tag(tag),
-          major(major),
-          minor(minor),
+          majorval(majorval),
+          minorval(minorval),
           headerBytes(headerBytes),
           p(p) {}
   };
@@ -243,15 +243,15 @@ class MicroCbor {
       return TypeInfo(kCborError);
     }
     uint8_t *p = mBuf + mDataOffset;
-    uint8_t major = *p >> 5;
-    uint8_t minor = *p & 0x1f;
-    uint8_t headerBytes = kCborheaderBytes[minor];
+    uint8_t majorval = *p >> 5;
+    uint8_t minorval = *p & 0x1f;
+    uint8_t headerBytes = kCborheaderBytes[minorval];
     if (mDataOffset + headerBytes > mMaxBufLen) {
       return TypeInfo(kCborError);
     }
-    TypeInfo field = TypeInfo(kCborTagInvalid, major, minor, headerBytes, p);
+    TypeInfo field = TypeInfo(kCborTagInvalid, majorval, minorval, headerBytes, p);
 
-    if (major == kCborTag) {
+    if (majorval == kCborTag) {
       // next field is the actual 'value'
       auto tag = getFieldValue(field);
       skipField(field);
@@ -265,7 +265,7 @@ class MicroCbor {
     uint8_t *p = info.p + 1;
     switch (info.headerBytes) {
       case 1:
-        return info.minor;
+        return info.minorval;
       case 2:
         return *p;
       case 3:
@@ -295,7 +295,7 @@ class MicroCbor {
       return;
     }
 
-    switch (info.major) {
+    switch (info.majorval) {
       case kCborByteString:
       case kCborUTF8String: {
         mDataOffset += len;
@@ -337,7 +337,7 @@ class MicroCbor {
     auto mapOffset = mDataOffset;
     auto info = getNextField();
     // We must be in a map to find anything
-    if (info.major != kCborMap) {
+    if (info.majorval != kCborMap) {
       return TypeInfo(kCborError);
     }
 
@@ -438,21 +438,21 @@ class MicroCbor {
    * @brief Encode an unsigned integer length field along with a CBOR major
    * type.
    *
-   * @param major
+   * @param majorval
    * @param len
    */
-  void encodeHeader(const uint8_t major, const uint32_t len) noexcept {
+  void encodeHeader(const uint8_t majorval, const uint32_t len) noexcept {
     if (len < 24) {
       reserveBytes(1);
-      storeByte(major << 5 | len);
+      storeByte(majorval << 5 | len);
     } else if (len < 256) {
       reserveBytes(2);
-      storeByte(major << 5 | 24);
+      storeByte(majorval << 5 | 24);
       storeByte(len);
     } else if (len < 65536) {
-      encodeUInt16(major << 5 | 25, uint16_t(len));
+      encodeUInt16(majorval << 5 | 25, uint16_t(len));
     } else {
-      encodeUInt32(major << 5 | 26, len);
+      encodeUInt32(majorval << 5 | 26, len);
     }
   }
 
@@ -873,7 +873,7 @@ class MicroCbor {
    */
   MicroCbor getMap(const char *name) {
     auto element = findElement(name);
-    if (element.major == kCborMap) {
+    if (element.majorval == kCborMap) {
       return MicroCbor(element.p, mMaxBufLen - mDataOffset);
     } else {
       return MicroCbor();
@@ -899,18 +899,18 @@ class MicroCbor {
                        uint64_t(p[2]) << 40 | uint64_t(p[3]) << 32 |
                        uint64_t(p[4]) << 24 | uint64_t(p[5]) << 16 |
                        uint64_t(p[6]) << 8 | uint64_t(p[7]);
-      if (element.major == kCborPosInt) {
+      if (element.majorval == kCborPosInt) {
         return T(value);
       }
-      if (element.major == kCborNegInt) {
+      if (element.majorval == kCborNegInt) {
         return T(-value - 1);
       }
     } else {
       auto value = getFieldValue(element);
-      if (element.major == kCborPosInt) {
+      if (element.majorval == kCborPosInt) {
         return T(value);
       }
-      if (element.major == kCborNegInt) {
+      if (element.majorval == kCborNegInt) {
         return T(-value - 1);
       }
     }
@@ -930,10 +930,10 @@ class MicroCbor {
   T get(const char *name, const T defaultValue) noexcept {
     auto element = findElement(name);
 
-    if (element.major == kCborSimple) {
-      if (element.minor == 20) {
+    if (element.majorval == kCborSimple) {
+      if (element.minorval == 20) {
         return false;
-      } else if (element.minor == 21) {
+      } else if (element.minorval == 21) {
         return true;
       } else {
         return defaultValue;
@@ -956,8 +956,8 @@ class MicroCbor {
   T get(const char *name, const T defaultValue) noexcept {
     auto element = findElement(name);
 
-    if (element.major == kCborSimple) {
-      if (element.minor == 26) {
+    if (element.majorval == kCborSimple) {
+      if (element.minorval == 26) {
         uint32_t f = getFieldValue(element);
         return *(float *)&f;
       } else {
@@ -985,7 +985,7 @@ class MicroCbor {
                              std::is_same<char *, T>::value)>::type * = nullptr>
   const char *get(const char *name, T defaultValue) noexcept {
     auto element = findElement(name);
-    if (element.major == kCborUTF8String) {
+    if (element.majorval == kCborUTF8String) {
       const char *s = (const char *)(element.p + element.headerBytes);
       return s;
     }
@@ -1010,9 +1010,9 @@ class MicroCbor {
    */
   uint32_t getLength(const char *name) noexcept {
     auto element = findElement(name);
-    if (element.major != kCborError) {
+    if (element.majorval != kCborError) {
       auto len = getFieldValue(element);
-      if (element.major == kCborUTF8String &&
+      if (element.majorval == kCborUTF8String &&
           element.p[element.headerBytes + len - 1] == 0) {
         // do not count the attached null bytes
         len -= 1;
